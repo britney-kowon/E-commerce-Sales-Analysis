@@ -1,0 +1,167 @@
+---
+title: "E-Commerce Sales Behaviour with R"
+author: "Britney Kon"
+format: html
+editor: visual
+---
+
+## E-commerce Sales Data
+
+The data is comprised of e-commerce sales trends from 01-01-2023 to 31-12-2024. With customer segments in 3 divisions: Regulars, Occasional, Other shoppers. Data was synthetically generated to mimic realistic e-commerce sales trends with accompanying marketing expenses, units sold, discount and prices.
+
+An exploratory analysis of shoppers and purchases during sales to support data-driven decision-making.
+
+[Data Source](https://www.kaggle.com/datasets/nevildhinoja/e-commerce-sales-prediction-dataset)
+
+## Business Task
+
+Increasing sales through optimal discount rates on online shopping platform
+
+To guide the analysis, the following questions were crafted:
+
+1.  What is the sales distribution by both customer and product?
+
+2.  How is the sales distributed across prices?
+
+3.  What is the marketing investment and sales relationship? (How does money spent affect units sold?)
+
+4.  What is the overall distribution for the different product categories, their prices, discount and units sold?
+
+5.  What is the sales performance in the last quarter?
+
+## Key Findings
+
+Regular (34.5%), Occasional (33.2%) and Premium (32.3%) customers make up the total sales across product categories. The purchase frequency by these groups are very similar.
+
+However, the regulars do buy more electronics, while the occasional customers buy more toys, and premium; sports.
+
+The correlation between the price of products, discounts and units sold is relatively weak - with high discount rates, it didn't necessarily mean that there were more units sold between the low and high priced items within the same category. It seems that discounts were mostly made use of when it aligns with customer's needs, otherwise, they were indifferent to the discounts.
+
+Example; at 15% discount for Electronics, for product priced at 429.5, it sold 41 units. In contrast, for product priced at 457.7, it sold fewer units (30). Again, for product priced at 803.52, it sold 38 units. There is little relation between discount and the units sold at the different price levels. This may be entirely subjective on the specific product at each price level, the desirability of them and the alignment of consumer needs.
+
+Additionally, in the time-series plot, toys sold significantly more in early October and had a more constant upward growth from mid-December to January. Other notable movements were (1) the upward surge in Fashion and Home Decor sales at year end, (2) regular fluctuations for other categories in units sold, (3) Home Decor, Fashion dipped in early December while Sports, Electronics surged.
+
+Due to the nature of the data set, there's a limit to analyses with unknowns, like, the specific product types in each product category, the cost, revenue for them. We can only make broad assumptions.
+
+## Running Code
+
+#### Preliminary steps - from importing to cleaning
+
+```{r}
+library(tidyverse)
+df <- read_csv("./Ecommerce_Sales_Prediction_Dataset.csv")
+colnames(df) <- tolower(colnames(df))
+```
+
+#### Sales distribution by customer segment and product categories through group bar charts
+
+```{r}
+# a modified data frame to sum the units sold for each category by each customer segment
+sales_by_product_customer <- df |> 
+  group_by(customer_segment, product_category) |>
+  summarise(total_sold = sum(units_sold))
+
+sales_by_product_customer |>
+  ggplot(aes(x = product_category, y = total_sold, fill = customer_segment, color = customer_segment)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.5) +
+  labs(x= "Product Category", y = "Units Sold", fill = "Customer Segment", color = "Customer Segment") +
+  theme_bw()
+  
+```
+
+*We can see how the total units sold compare across categories and by each customer segment.*
+
+#### An alternate way to view it in a more customer-centric direction.
+
+```{r}
+library(webr)
+
+sales_by_product_customer |>
+  PieDonut(aes(x = customer_segment, y = product_category,
+               count = total_sold), 
+           title = "Customer distribution by product category")
+```
+
+*Here, we are able to see the proportion of each customer segment and their % categorical purchase. E.g. Of the total sales by Regulars, 23.5% were from Electronics and of the total sales by Occasional customers, 21.7% were from Toys. At a glance, we know which categories are most popular with each customer segment.*
+
+#### Relationship of units sold and price (with additional layers of product category and discount rate)
+
+```{r}
+#overall
+df |>
+  ggplot(aes(x = price, y = units_sold, size = discount, color = product_category)) +
+  geom_point(alpha = 0.5) +
+  labs(x = "Price ($) per Unit Product", y = "Units Sold", size = "% Discount", Color = "Product Category") +
+  theme_bw()
+```
+
+#### Comprehensive Product Discount and Sales Data (Shiny App)
+
+```{r}
+
+#For better visuals and concision, we round the discount values for better filtering
+
+discount_rounded_df <- df |>
+  mutate(discount = round(discount, 0))
+
+library(shiny)
+library(plotly)
+
+product_list <- as.list(unique(df$product_category))
+
+ui <- fluidPage(
+  titlePanel("Comprehensive Discounts, Units Sold by Product Type and Price"),
+  checkboxGroupInput("product", "Select Product Category",
+              choices = product_list, 
+              selected = c("Sports")),
+  sliderInput("discount", "Discount Range", 
+              min = min(discount_rounded_df$discount), 
+              max = max(discount_rounded_df$discount), 
+              value = c(20, 25)),
+  plotlyOutput("plot")
+)
+
+server <- function(input, output, session) {
+  output$plot <- renderPlotly ({
+    DF <- discount_rounded_df |>
+      filter(product_category == input$product, 
+             discount == input$discount)
+  
+    ggplot(data = DF, aes(x = price, y = units_sold, 
+               color = product_category)) +
+    geom_point(aes(size = discount), alpha = 0.5) +
+    geom_smooth(method = lm, se = FALSE) +
+    labs(x = "Price ($) per Unit Product", y = "Units Sold", size = "% Discount", Color = "Product Category") +
+    theme_bw()
+  })
+}
+
+shinyApp(ui, server)
+```
+
+*Generally with any product and discount range, there is not a very strong correlation between the price of products, their respective discounts and units sold. It can indicate an indifference to discounts, and that people simply buy when they want to - whether there's a large or small discount. Units sold against price is downwards sloping, which is normal for every level of purchasing power. E.g. Sports items priced at 472 and 986 with 25% discount see different units sold. The ones priced at 472 sold 37 while the one priced at 986 sold 24. If high units sold is our criteria, then the sports items priced at 472 would drive more sales than items priced at 986*
+
+*However, if we are looking at the optimal discount for each price point and respective category, then we would need to set profits as our goal.*
+
+*Due to the nature of the data, we do not have the revenue, cost, profit information. If profits and revenue data were available, the number of units sold will be more meaningful for each discount level and we can determine the optimal discount for each category and price*
+
+#### Sales Trend in Q4 2024
+
+```{r}
+
+library(lubridate)
+library(scales)
+
+discount_rounded_df |>
+  mutate(date = dmy(date)) |>
+  filter(date >= dmy("01-08-2024") & 
+           date <= dmy("31-12-2024")) |>
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = units_sold, 
+                color = product_category)) +
+  labs(x = "Month", y = "Units Sold", title = "Units Sold in 2024 Q4", color = "Product Category") +
+  scale_x_date(breaks = date_breaks("months"), 
+               labels = date_format("%b")) +
+  theme_bw()
+
+```
